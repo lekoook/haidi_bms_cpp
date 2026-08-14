@@ -1,0 +1,65 @@
+---
+# Derived from the style already used in include/ and src/:
+#   - 4-space indent, no tabs
+#   - `namespace haidi` opens its brace on the next line
+#   - classes and functions attach their brace on the same line
+#   - access specifiers sit at the same indent as the members they introduce
+#   - namespace bodies are not indented, and carry a closing `// namespace x`
+Language: Cpp
+BasedOnStyle: LLVM
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+
+# `public:` / `protected:` / `private:` line up with the members below them
+# rather than outdenting to the class keyword.
+AccessModifierOffset: 0
+IndentAccessModifiers: false
+
+NamespaceIndentation: None
+FixNamespaceComments: true
+CompactNamespaces: false
+
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterNamespace: true
+  AfterClass: false
+  AfterStruct: false
+  AfterUnion: false
+  AfterEnum: false
+  AfterFunction: false
+  AfterControlStatement: Never
+  AfterCaseLabel: false
+  BeforeElse: false
+  BeforeCatch: false
+  BeforeWhile: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
+
+PointerAlignment: Left
+ReferenceAlignment: Left
+QualifierAlignment: Left
+
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+
+AlwaysBreakTemplateDeclarations: Yes
+BreakConstructorInitializers: BeforeColon
+PackConstructorInitializers: NextLine
+SeparateDefinitionBlocks: Leave
+
+IndentCaseLabels: true
+IndentPPDirectives: None
+
+SortIncludes: CaseSensitive
+IncludeBlocks: Preserve
+
+SpaceAfterTemplateKeyword: false
+SpacesBeforeTrailingComments: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
