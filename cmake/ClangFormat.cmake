@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Xavier Lee <kokteng1313@gmail.com>
+# SPDX-License-Identifier: MIT
+
 # clang-format integration.
 #
 #   cmake --build build --target format         -- rewrite sources in place
@@ -17,6 +20,9 @@ file(GLOB_RECURSE HAIDI_FORMAT_SOURCES
     "${CMAKE_SOURCE_DIR}/src/*.cpp"
     "${CMAKE_SOURCE_DIR}/src/*.hpp"
     "${CMAKE_SOURCE_DIR}/include/*.hpp"
+    "${CMAKE_SOURCE_DIR}/tests/*.cpp"
+    "${CMAKE_SOURCE_DIR}/tests/*.hpp"
+    "${CMAKE_SOURCE_DIR}/examples/*.cpp"
 )
 
 add_custom_target(format

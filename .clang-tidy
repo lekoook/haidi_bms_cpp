@@ -1,4 +1,14 @@
 ---
+# Disabled beyond the defaults, and why:
+#   pro-bounds-constant-array-index / pro-bounds-pointer-arithmetic
+#       a wire-protocol codec indexes byte arrays by a runtime offset and walks
+#       caller-supplied buffers by pointer; both are inherent to the job.
+#   pro-type-union-access
+#       Event carries an explicit tagged union on purpose -- std::variant::get
+#       throws, and this library targets builds with exceptions disabled.
+#   bugprone-easily-swappable-parameters
+#       fires on (count, per_frame) style helpers where the names carry the
+#       meaning and a wrapper type would cost more than it saves.
 Checks: >
   -*,
   bugprone-*,
@@ -16,7 +26,11 @@ Checks: >
   -cppcoreguidelines-avoid-magic-numbers,
   -readability-magic-numbers,
   -portability-avoid-pragma-once,
-  -misc-include-cleaner
+  -misc-include-cleaner,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-type-union-access,
+  -bugprone-easily-swappable-parameters
 
 WarningsAsErrors: ''
 HeaderFilterRegex: '.*/(include|src)/.*\.(h|hpp)$'
@@ -24,14 +38,36 @@ HeaderFilterRegex: '.*/(include|src)/.*\.(h|hpp)$'
 FormatStyle: file
 
 CheckOptions:
-  readability-identifier-naming.NamespaceCase: lower_case
-  readability-identifier-naming.ClassCase: CamelCase
-  readability-identifier-naming.StructCase: CamelCase
-  readability-identifier-naming.EnumCase: CamelCase
-  readability-identifier-naming.FunctionCase: lower_case
-  readability-identifier-naming.VariableCase: lower_case
-  readability-identifier-naming.ParameterCase: lower_case
-  readability-identifier-naming.PrivateMemberSuffix: '_'
-  readability-identifier-naming.ConstantCase: UPPER_CASE
-  readability-identifier-naming.MacroDefinitionCase: UPPER_CASE
-  readability-function-cognitive-complexity.Threshold: 25
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: lower_case
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.ParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.PrivateMemberSuffix
+    value: '_'
+  - key: readability-identifier-naming.ConstantCase
+    value: UPPER_CASE
+  # ConstantCase alone would demand UPPER_CASE for every `const` local, which
+  # is not what the surrounding style does. Only namespace- and class-scope
+  # constants are shouted.
+  - key: readability-identifier-naming.LocalConstantCase
+    value: lower_case
+  - key: readability-identifier-naming.LocalConstantPointerCase
+    value: lower_case
+  - key: readability-identifier-naming.ConstantParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.ConstantMemberCase
+    value: lower_case
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+  - key: readability-function-cognitive-complexity.Threshold
+    value: 25

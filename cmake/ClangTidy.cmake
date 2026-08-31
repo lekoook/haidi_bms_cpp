@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Xavier Lee <kokteng1313@gmail.com>
+# SPDX-License-Identifier: MIT
+
 # clang-tidy integration.
 #
 # Two ways to lint:

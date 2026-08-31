@@ -1,0 +1,146 @@
+// Copyright (c) 2026 Xavier Lee <kokteng1313@gmail.com>
+// SPDX-License-Identifier: MIT
+
+/**
+@mainpage haidi_bms_cpp
+
+An asynchronous, transport-agnostic driver for HAIDI battery management systems
+speaking the CAN/485/UART protocol V4.0.
+
+The library never touches a serial port, a clock or a thread. It encodes
+requests, frames and decodes replies, and hands results back through callbacks;
+moving bytes and measuring time are the caller's job.
+
+@section mainpage_wiring Wiring it up
+
+Four things connect a haidi::HaidiBMS to the outside world:
+
+| | |
+|---|---|
+| haidi::HaidiBMS::set_tx_handler  | invoked whenever bytes must go out on the wire |
+| haidi::HaidiBMS::set_event_handler | invoked whenever a reply, timeout or error occurs |
+| haidi::HaidiBMS::feed            | called with bytes as they are received |
+| haidi::HaidiBMS::tick            | called periodically with a monotonic millisecond count |
+
+@code{.cpp}
+using namespace haidi;
+
+HaidiBMS bms{HostAddress::COMP};
+bms.set_tx_handler(&on_tx, &fd);
+bms.set_event_handler(&on_event, &app);
+
+bms.poll_total_voltage_current_soc();   // returns immediately
+
+for (;;) {
+    bms.tick(monotonic_ms());
+    uint8_t buf[64];
+    const ssize_t n = ::read(fd, buf, sizeof buf);
+    if (n > 0) {
+        bms.feed(buf, static_cast<size_t>(n));
+    }
+}
+@endcode
+
+Results arrive as a haidi::Event. Read the payload with the checked accessor for
+the command you asked for; it returns @c nullptr if the event is anything else,
+so there is no need to trust haidi::Event::id by hand:
+
+@code{.cpp}
+void on_event(void*, const Event& event) {
+    if (const auto* v = as_total_voltage_current_soc(event)) {
+        printf("%u.%u V\n", v->cumulative_voltage_dv / 10, v->cumulative_voltage_dv % 10);
+    }
+}
+@endcode
+
+Any poll may also carry its own handler, invoked before the session-wide one:
+
+@code{.cpp}
+bms.poll_capacity_voltage(&on_capacity, &app);
+@endcode
+
+@warning haidi::HaidiBMS::tick is not optional bookkeeping. Sending and
+receiving are clock-free, so a link on which every reply arrives appears to work
+without it -- but deadlines are examined nowhere else, so a single lost reply
+stalls the session permanently, and paginated reads whose length is unknown
+never complete at all.
+
+@section mainpage_layers Layers
+
+Each layer is usable and testable on its own:
+
+| Layer | Header |
+|---|---|
+| Frame codec: constants, Data IDs, checksum, big-endian readers | haidi_protocol.hpp |
+| Byte-stream framer: resynchronising, checksum-verifying | haidi_frame_parser.hpp |
+| Decoded payload structs, one per command family | haidi_payloads.hpp |
+| The event type and its checked accessors | haidi_event.hpp |
+| The session: queue, timeouts, reassembly, dispatch | haidi_bms.hpp |
+
+@section mainpage_protocol Protocol notes
+
+Every frame is exactly 13 bytes in both directions, and the bus is strictly
+host-polled: the BMS never speaks unsolicited, and section 5.3 of the protocol
+document states that "two data items cannot be read at once", so the session
+keeps at most one request outstanding and queues the rest.
+
+Correlation is by the echoed Data ID alone -- there is no sequence number -- and
+the protocol defines no error or NAK reply. The only failure signals available
+are a timeout, a bad checksum, a malformed frame, a reply from the wrong
+address, a mismatched Data ID, and for the two MOS control commands an echoed
+state that differs from the one requested.
+
+Several of those are reported while the request stays in flight, so one
+request can produce more than one event: a corrupted frame is reported, and the
+request is still answered, retried or timed out afterwards. haidi::ErrorCode
+says which errors end a request.
+
+The normative reference is @c docs/CAN @c 485 @c UART @c Protocol @c V4.0 @c HAIDI.pdf
+in this repository. Where its own annotations are self-contradictory, the
+affected declarations carry an @c \@note recording the reading that was chosen
+and why.
+
+@subsection mainpage_pagination Paginated replies and the frame counter
+
+A reply longer than eight bytes is split across frames, with Byte0 of each
+carrying a frame counter and Byte1 onwards the payload. The base that counter
+starts from is not uniform: the document specifies 1 for 0x55, 0x56, 0x57 and
+0x6A, and 0 for 0x62, 0x63, 0x64, 0x95 and 0x96.
+
+**Devices do not reliably honour it.** A pack has been observed answering 0x95
+with frames numbered 1, 2, 3 where its own document specifies 0 — verified from
+a byte-level capture, checksums intact:
+
+@verbatim
+A5 01 95 08 | 01 0B B8 0B B8 0B B8 00 | 8D
+A5 01 95 08 | 02 0B B8 0B B8 0B B8 00 | 8E
+A5 01 95 08 | 03 0B B8 0B B8 0B B8 00 | 8F
+              ^^ frame counter
+@endverbatim
+
+The session therefore treats the documented base as a default, not as fact. Each
+frame is filed under the counter the device actually sent, and the base of a
+transfer is taken to be the lowest counter that arrived. Both conventions decode
+correctly on every paginated command, and no configuration is involved.
+
+Two consequences worth knowing:
+
+- A counter of 16 is legal. The widest reply the protocol allows is 0x95 with
+  48 cells over 16 frames, which on a pack counting from 1 numbers them 1..16.
+- A reply is truncated at the first **missing** frame rather than returned at
+  full length with a hole in it. A hole in 0x95 would be indistinguishable from
+  cells genuinely reading 0 mV, so the count comes back short instead — which,
+  as below, is not an error.
+
+A paginated reply that stops early is reported as a successful response carrying
+a smaller count, never as a failure: every paginated payload is self-describing,
+and for 0x95 and 0x96 on a pack whose cell count has never been read, the
+inter-frame timeout is the *normal* end-of-reply signal rather than an error
+path. The exception is the 0x64 fault-record stream, which has no length of its
+own: one that goes quiet before its 0xFF end sentinel is reported as
+haidi::ErrorCode::TRUNCATED.
+
+@section mainpage_licence Licence
+
+MIT. See the @c LICENSE file at the root of the repository.
+*/
