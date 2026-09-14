@@ -103,8 +103,8 @@ enum class DataId : uint8_t {
     MANUFACTURER_NAME = 0x55,         ///< Manufacturer name, 16 bytes over 3 frames. Data ID 0x55.
     BATTERY_NAME = 0x56,              ///< Battery name, 32 bytes over 5 frames. Data ID 0x56.
     BATTERY_SERIAL_NUMBER = 0x57, ///< Battery serial number, 32 bytes over 5 frames. Data ID 0x57.
-    BATTERY_PRODUCTION_DATE =
-        0x58, ///< Production date. Reply layout undefined; raw bytes returned. Data ID 0x58.
+    BATTERY_PRODUCTION_DATE = 0x58, ///< Production date, assumed to share the 0x61 layout, which
+                                    ///< the document leaves reserved. Data ID 0x58.
     CELL_VOLTAGE_ALARM = 0x59,  ///< Cell over- and under-voltage alarm thresholds. Data ID 0x59.
     TOTAL_VOLTAGE_ALARM = 0x5A, ///< Pack over- and under-voltage alarm thresholds. Data ID 0x5A.
     CURRENT_ALARM = 0x5B, ///< Charge and discharge overcurrent alarms. Charge first. Data ID 0x5B.

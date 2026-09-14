@@ -99,16 +99,24 @@ TEST_F(CommandTest, FirmwareIndex_0x54) {
     EXPECT_EQ(payload->text, expected) << "8 ASCII bytes, not null-terminated";
 }
 
-TEST_F(CommandTest, BatteryProductionDate_0x58_IsHandedBackUntouched) {
-    // The document never specifies this reply's layout, so the bytes are
-    // returned verbatim rather than being guessed at.
-    const DataBytes raw = bytes8({0x14, 0x09, 0x02, 0xDE, 0xAD, 0xBE, 0xEF, 0x01});
-    const Event event = bus.round_trip([&] { return bus.bms.poll_battery_production_date(); },
-                                       DataId::BATTERY_PRODUCTION_DATE, raw);
+TEST_F(CommandTest, BatteryProductionDate_0x58_DecodesWithTheRtcLayout) {
+    // The document marks every byte of this reply reserved; the layout is
+    // assumed to match 0x61.
+    const Event event =
+        bus.round_trip([&] { return bus.bms.poll_battery_production_date(); },
+                       DataId::BATTERY_PRODUCTION_DATE, {23, 11, 30, 8, 15, 42, 0x11, 0x22});
 
-    const RawPayload* payload = as_raw(event);
+    const Rtc* payload = as_battery_production_date(event);
     ASSERT_NE(payload, nullptr);
-    EXPECT_EQ(payload->data, raw);
+    EXPECT_EQ(payload->year, 2023);
+    EXPECT_EQ(payload->month, 11);
+    EXPECT_EQ(payload->day, 30);
+    EXPECT_EQ(payload->hour, 8);
+    EXPECT_EQ(payload->minute, 15);
+    EXPECT_EQ(payload->second, 42);
+    EXPECT_EQ(payload->reserved, (std::array<uint8_t, 2>{0x11, 0x22}));
+
+    EXPECT_EQ(as_rtc(event), nullptr) << "a production date is not a clock reading";
 }
 
 TEST_F(CommandTest, CellVoltageAlarm_0x59) {
@@ -309,8 +317,11 @@ TEST_F(CommandTest, AlarmThreshold_PlainClassUsesTheSharedLayout) {
         },
         id, {0x0E, 0x74, 0x00, 0x0A, 0x0E, 0x10, 0x00, 0x14});
 
-    const AlarmThreshold* payload = as_alarm_threshold(event);
+    const AlarmThreshold* payload = as_cell_overvoltage_threshold(event, AlarmLevel::LEVEL_1);
     ASSERT_NE(payload, nullptr);
+    EXPECT_EQ(as_alarm_threshold(event), payload);
+    EXPECT_EQ(as_cell_overvoltage_threshold(event, AlarmLevel::LEVEL_2), nullptr);
+    EXPECT_EQ(as_cell_undervoltage_threshold(event, AlarmLevel::LEVEL_1), nullptr);
     EXPECT_EQ(payload->value, 3700);
     EXPECT_EQ(payload->delay_cs, 10);
     EXPECT_EQ(payload->recovery_value, 3600);
@@ -328,8 +339,10 @@ TEST_F(CommandTest, AlarmThreshold_CurrentClassListsDischargeBeforeCharge) {
         [&] { return bus.bms.poll_alarm_threshold(AlarmClass::CURRENT, AlarmLevel::LEVEL_2); }, id,
         {0x71, 0x48, 0x00, 0x32, 0x76, 0x5C, 0x00, 0x64});
 
-    const CurrentAlarmThreshold* payload = as_current_alarm_threshold(event);
+    const CurrentAlarmThreshold* payload = as_overcurrent_threshold(event, AlarmLevel::LEVEL_2);
     ASSERT_NE(payload, nullptr);
+    EXPECT_EQ(as_current_alarm_threshold(event), payload);
+    EXPECT_EQ(as_overcurrent_threshold(event, AlarmLevel::LEVEL_3), nullptr);
     EXPECT_EQ(payload->discharge_overcurrent_da, -1000); // 29000 - 30000, read first
     EXPECT_EQ(payload->discharge_delay_cs, 50);
     EXPECT_EQ(payload->charge_overcurrent_da, 300); // 30300 - 30000
@@ -348,8 +361,10 @@ TEST_F(CommandTest, AlarmThreshold_TemperatureClassUsesDecisecondDelays) {
         },
         id, {95, 5, 85, 10, 100, 15, 90, 20});
 
-    const TempAlarmThreshold* payload = as_temp_alarm_threshold(event);
+    const TempAlarmThreshold* payload = as_high_temperature_threshold(event, AlarmLevel::LEVEL_1);
     ASSERT_NE(payload, nullptr);
+    EXPECT_EQ(as_temp_alarm_threshold(event), payload);
+    EXPECT_EQ(as_low_temperature_threshold(event, AlarmLevel::LEVEL_1), nullptr);
     EXPECT_EQ(payload->charge_alarm_c, 55); // 95 - 40
     EXPECT_EQ(payload->charge_delay_ds, 5); // deciseconds here, not centiseconds
     EXPECT_EQ(payload->charge_recovery_c, 45);
@@ -532,8 +547,9 @@ TEST_F(CommandTest, SetDischargeMos_0xD9_SendsTheRequestedStateAndAcceptsAMatchi
     EXPECT_EQ(data_of(bus.last_sent())[0], 1) << "the request carries the desired state";
 
     EXPECT_EQ(event.kind, EventKind::RESPONSE);
-    const MosControlAck* ack = as_mos_control_ack(event);
+    const MosControlAck* ack = as_discharge_mos_control(event);
     ASSERT_NE(ack, nullptr);
+    EXPECT_EQ(as_charge_mos_control(event), nullptr);
     EXPECT_TRUE(ack->requested_on);
     EXPECT_TRUE(ack->reported_on);
 }
@@ -545,8 +561,9 @@ TEST_F(CommandTest, SetChargeMos_0xDA_SendsZeroWhenTurningOff) {
     EXPECT_EQ(data_of(bus.last_sent())[0], 0);
     EXPECT_EQ(event.kind, EventKind::RESPONSE);
 
-    const MosControlAck* ack = as_mos_control_ack(event);
+    const MosControlAck* ack = as_charge_mos_control(event);
     ASSERT_NE(ack, nullptr);
+    EXPECT_EQ(as_discharge_mos_control(event), nullptr);
     EXPECT_FALSE(ack->requested_on);
     EXPECT_FALSE(ack->reported_on);
 }
@@ -560,8 +577,9 @@ TEST_F(CommandTest, ADifferingEchoIsAWriteRejectionThatStillCarriesBothStates) {
     EXPECT_EQ(event.kind, EventKind::PROTOCOL_ERROR);
     EXPECT_EQ(event.error, ErrorCode::WRITE_REJECTED);
 
-    const MosControlAck* ack = as_mos_control_ack(event);
+    const MosControlAck* ack = as_charge_mos_control(event);
     ASSERT_NE(ack, nullptr) << "a rejected write still reports what happened";
+    EXPECT_EQ(as_mos_control_ack(event), ack);
     EXPECT_TRUE(ack->requested_on);
     EXPECT_FALSE(ack->reported_on) << "the device did not do what was asked";
 
@@ -573,8 +591,8 @@ TEST_F(CommandTest, AnEchoOfAnyNonZeroValueCountsAsOn) {
                                        DataId::DISCHARGE_MOS_CONTROL, {0xFF});
 
     EXPECT_EQ(event.kind, EventKind::RESPONSE);
-    ASSERT_NE(as_mos_control_ack(event), nullptr);
-    EXPECT_TRUE(as_mos_control_ack(event)->reported_on);
+    ASSERT_NE(as_discharge_mos_control(event), nullptr);
+    EXPECT_TRUE(as_discharge_mos_control(event)->reported_on);
 }
 
 } // namespace

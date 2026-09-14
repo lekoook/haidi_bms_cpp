@@ -318,7 +318,11 @@ class HaidiBMS {
         return request(DataId::BATTERY_SERIAL_NUMBER, fn, ctx);
     }
     /**
-     * @brief Production date. Reply layout undefined; raw bytes returned (0x58).
+     * @brief Production date (0x58), read with as_battery_production_date().
+     *
+     * @note The document marks every byte of the reply reserved. It is decoded
+     * as an Rtc, on the assumption that it shares the 0x61 layout.
+     *
      * @param fn  Optional per-request handler, invoked before the session-wide one.
      * @param ctx Opaque pointer passed to @p fn; must outlive the transaction.
      * @return QueueStatus::QUEUED, or why the request was refused.

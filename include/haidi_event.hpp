@@ -95,6 +95,7 @@ enum class ErrorCode : uint8_t {
      * @brief 0xD9/0xDA echoed a state other than the one requested.
      *
      * Ends the request. The event still carries both states; see
+     * as_discharge_mos_control(), as_charge_mos_control() and
      * as_mos_control_ack().
      */
     WRITE_REJECTED
@@ -110,8 +111,6 @@ enum class ErrorCode : uint8_t {
  * mismatch instead of handing back another command's bytes.
  */
 union EventPayload {
-    RawPayload raw; ///< Data ID 0x58, whose reply layout the document leaves undefined.
-
     CapacityVoltage capacity_voltage;                 ///< Data ID 0x50.
     BmuCellTempCount bmu_cell_temp_count;             ///< Data ID 0x51.
     TotalChargeDischargeAh total_charge_discharge_ah; ///< Data ID 0x52.
@@ -126,7 +125,7 @@ union EventPayload {
     DifferenceAlarm difference_alarm;                 ///< Data ID 0x5E.
     BalancingParams balancing_params;                 ///< Data ID 0x5F.
     CurrentParams current_params;                     ///< Data ID 0x60.
-    Rtc rtc;                                          ///< Data ID 0x61.
+    Rtc rtc;                                          ///< Data ID 0x58, 0x61.
     VersionPayload version;                           ///< Data ID 0x62, 0x63.
     FaultRecord fault_record;                         ///< Data ID 0x64.
     BoardNumber board_number;                         ///< Data ID 0x65.
@@ -217,11 +216,14 @@ struct Event {
 };
 
 /**
- * @name Checked payload accessors
+ * @name Per-command payload accessors
  *
- * Each returns @c nullptr unless the event is a successful reply carrying that
- * exact payload, so a caller never has to trust Event::id by hand. The one
- * exception is as_mos_control_ack(), which also answers an
+ * One accessor per command. Each returns @c nullptr unless the event is a
+ * successful reply to that exact command, so the call names the command being
+ * read and a caller never has to trust Event::id by hand. The alarm-threshold
+ * accessors also take an AlarmLevel, since a class and a level together name
+ * one Data ID. The one exception to "successful" is the MOSFET pair,
+ * as_discharge_mos_control() and as_charge_mos_control(), which also answer an
  * ErrorCode::WRITE_REJECTED event.
  *
  * @code{.cpp}
@@ -231,13 +233,6 @@ struct Event {
  * @endcode
  */
 ///@{
-
-/**
- * @brief The RawPayload of a 0x58 production-date reply.
- * @param event The event to inspect.
- * @return The payload, or @c nullptr unless @p event is a successful 0x58 reply.
- */
-const RawPayload* as_raw(const Event& event);
 
 /**
  * @brief The CapacityVoltage of a 0x50 reply.
@@ -275,12 +270,37 @@ const BatteryOperationMode* as_battery_operation_mode(const Event& event);
 const FirmwareIndex* as_firmware_index(const Event& event);
 
 /**
- * @brief The TextPayload of a 0x55, 0x56, 0x57 or 0x6A reply.
+ * @brief The manufacturer name from a 0x55 reply.
  * @param event The event to inspect.
- * @return The payload, or @c nullptr unless @p event is a successful reply to one
- *         of those four.
+ * @return The payload, or @c nullptr unless @p event is a successful 0x55 reply.
  */
-const TextPayload* as_text(const Event& event);
+const TextPayload* as_manufacturer_name(const Event& event);
+
+/**
+ * @brief The battery name from a 0x56 reply.
+ * @param event The event to inspect.
+ * @return The payload, or @c nullptr unless @p event is a successful 0x56 reply.
+ */
+const TextPayload* as_battery_name(const Event& event);
+
+/**
+ * @brief The battery serial number from a 0x57 reply.
+ * @param event The event to inspect.
+ * @return The payload, or @c nullptr unless @p event is a successful 0x57 reply.
+ */
+const TextPayload* as_battery_serial_number(const Event& event);
+
+/**
+ * @brief The production date from a 0x58 reply.
+ *
+ * @note The document marks every byte of this reply reserved. It is decoded
+ * with the 0x61 layout -- year, month, day, hour, minute, second -- on the
+ * assumption that the two share one; see Rtc.
+ *
+ * @param event The event to inspect.
+ * @return The payload, or @c nullptr unless @p event is a successful 0x58 reply.
+ */
+const Rtc* as_battery_production_date(const Event& event);
 
 /**
  * @brief The CellVoltageAlarm of a 0x59 reply.
@@ -346,12 +366,18 @@ const CurrentParams* as_current_params(const Event& event);
 const Rtc* as_rtc(const Event& event);
 
 /**
- * @brief The VersionPayload of a 0x62 or 0x63 reply.
+ * @brief The software version from a 0x62 reply.
  * @param event The event to inspect.
- * @return The payload, or @c nullptr unless @p event is a successful reply to one
- *         of those two.
+ * @return The payload, or @c nullptr unless @p event is a successful 0x62 reply.
  */
-const VersionPayload* as_version(const Event& event);
+const VersionPayload* as_software_version(const Event& event);
+
+/**
+ * @brief The hardware version from a 0x63 reply.
+ * @param event The event to inspect.
+ * @return The payload, or @c nullptr unless @p event is a successful 0x63 reply.
+ */
+const VersionPayload* as_hardware_version(const Event& event);
 
 /**
  * @brief One FaultRecord from a 0x64 stream.
@@ -396,30 +422,101 @@ const ActiveBalancingParams* as_active_balancing_params(const Event& event);
 const InverterParams* as_inverter_params(const Event& event);
 
 /**
- * @brief The AlarmThreshold of a 0x70..0x8A reply, for the classes that use it.
+ * @brief The SN serial number from a 0x6A reply.
  * @param event The event to inspect.
- * @return The payload, or @c nullptr unless @p event is a successful
- *         alarm-threshold reply of a class other than AlarmClass::CURRENT,
- *         AlarmClass::HIGH_TEMPERATURE and AlarmClass::LOW_TEMPERATURE.
+ * @return The payload, or @c nullptr unless @p event is a successful 0x6A reply.
  */
-const AlarmThreshold* as_alarm_threshold(const Event& event);
+const TextPayload* as_sn_serial_number(const Event& event);
 
 /**
- * @brief The CurrentAlarmThreshold of a 0x72, 0x7B or 0x84 reply.
+ * @brief A cell overvoltage threshold: 0x70, 0x79 or 0x82 by level.
  * @param event The event to inspect.
- * @return The payload, or @c nullptr unless @p event is a successful
- *         AlarmClass::CURRENT threshold reply.
+ * @param level The severity tier to expect.
+ * @return The payload, or @c nullptr unless @p event is a successful reply to
+ *         alarm_threshold_id(AlarmClass::CELL_OVERVOLTAGE, @p level). An
+ *         out-of-range @p level always gives @c nullptr.
  */
-const CurrentAlarmThreshold* as_current_alarm_threshold(const Event& event);
+const AlarmThreshold* as_cell_overvoltage_threshold(const Event& event, AlarmLevel level);
 
 /**
- * @brief The TempAlarmThreshold of a 0x73/0x74, 0x7C/0x7D or 0x85/0x86 reply.
+ * @brief A cell undervoltage threshold: 0x71, 0x7A or 0x83 by level.
  * @param event The event to inspect.
- * @return The payload, or @c nullptr unless @p event is a successful
- *         AlarmClass::HIGH_TEMPERATURE or AlarmClass::LOW_TEMPERATURE threshold
- *         reply.
+ * @param level The severity tier to expect.
+ * @return The payload, or @c nullptr unless @p event is a successful reply to
+ *         alarm_threshold_id(AlarmClass::CELL_UNDERVOLTAGE, @p level). An
+ *         out-of-range @p level always gives @c nullptr.
  */
-const TempAlarmThreshold* as_temp_alarm_threshold(const Event& event);
+const AlarmThreshold* as_cell_undervoltage_threshold(const Event& event, AlarmLevel level);
+
+/**
+ * @brief A charge and discharge overcurrent threshold: 0x72, 0x7B or 0x84 by level.
+ * @param event The event to inspect.
+ * @param level The severity tier to expect.
+ * @return The payload, or @c nullptr unless @p event is a successful reply to
+ *         alarm_threshold_id(AlarmClass::CURRENT, @p level). An out-of-range
+ *         @p level always gives @c nullptr.
+ */
+const CurrentAlarmThreshold* as_overcurrent_threshold(const Event& event, AlarmLevel level);
+
+/**
+ * @brief A high-temperature threshold: 0x73, 0x7C or 0x85 by level.
+ * @param event The event to inspect.
+ * @param level The severity tier to expect.
+ * @return The payload, or @c nullptr unless @p event is a successful reply to
+ *         alarm_threshold_id(AlarmClass::HIGH_TEMPERATURE, @p level). An
+ *         out-of-range @p level always gives @c nullptr.
+ */
+const TempAlarmThreshold* as_high_temperature_threshold(const Event& event, AlarmLevel level);
+
+/**
+ * @brief A low-temperature threshold: 0x74, 0x7D or 0x86 by level.
+ * @param event The event to inspect.
+ * @param level The severity tier to expect.
+ * @return The payload, or @c nullptr unless @p event is a successful reply to
+ *         alarm_threshold_id(AlarmClass::LOW_TEMPERATURE, @p level). An
+ *         out-of-range @p level always gives @c nullptr.
+ */
+const TempAlarmThreshold* as_low_temperature_threshold(const Event& event, AlarmLevel level);
+
+/**
+ * @brief A pack overvoltage threshold: 0x75, 0x7E or 0x87 by level.
+ * @param event The event to inspect.
+ * @param level The severity tier to expect.
+ * @return The payload, or @c nullptr unless @p event is a successful reply to
+ *         alarm_threshold_id(AlarmClass::TOTAL_OVERVOLTAGE, @p level). An
+ *         out-of-range @p level always gives @c nullptr.
+ */
+const AlarmThreshold* as_total_overvoltage_threshold(const Event& event, AlarmLevel level);
+
+/**
+ * @brief A pack undervoltage threshold: 0x76, 0x7F or 0x88 by level.
+ * @param event The event to inspect.
+ * @param level The severity tier to expect.
+ * @return The payload, or @c nullptr unless @p event is a successful reply to
+ *         alarm_threshold_id(AlarmClass::TOTAL_UNDERVOLTAGE, @p level). An
+ *         out-of-range @p level always gives @c nullptr.
+ */
+const AlarmThreshold* as_total_undervoltage_threshold(const Event& event, AlarmLevel level);
+
+/**
+ * @brief A cell voltage spread threshold: 0x77, 0x80 or 0x89 by level.
+ * @param event The event to inspect.
+ * @param level The severity tier to expect.
+ * @return The payload, or @c nullptr unless @p event is a successful reply to
+ *         alarm_threshold_id(AlarmClass::VOLTAGE_DIFFERENCE, @p level). An
+ *         out-of-range @p level always gives @c nullptr.
+ */
+const AlarmThreshold* as_voltage_difference_threshold(const Event& event, AlarmLevel level);
+
+/**
+ * @brief A cell temperature spread threshold: 0x78, 0x81 or 0x8A by level.
+ * @param event The event to inspect.
+ * @param level The severity tier to expect.
+ * @return The payload, or @c nullptr unless @p event is a successful reply to
+ *         alarm_threshold_id(AlarmClass::TEMPERATURE_DIFFERENCE, @p level). An
+ *         out-of-range @p level always gives @c nullptr.
+ */
+const AlarmThreshold* as_temperature_difference_threshold(const Event& event, AlarmLevel level);
 
 /**
  * @brief The TotalVoltageCurrentSoc of a 0x90 reply.
@@ -506,10 +603,87 @@ const BatteryStatus* as_battery_status(const Event& event);
 const WakeupSource* as_wakeup_source(const Event& event);
 
 /**
+ * @brief The MosControlAck of a 0xD9 discharge MOSFET write.
+ * @param event The event to inspect.
+ * @return The payload, or @c nullptr unless @p event is a 0xD9 reply that either
+ *         succeeded or failed with ErrorCode::WRITE_REJECTED.
+ */
+const MosControlAck* as_discharge_mos_control(const Event& event);
+
+/**
+ * @brief The MosControlAck of a 0xDA charge MOSFET write.
+ * @param event The event to inspect.
+ * @return The payload, or @c nullptr unless @p event is a 0xDA reply that either
+ *         succeeded or failed with ErrorCode::WRITE_REJECTED.
+ */
+const MosControlAck* as_charge_mos_control(const Event& event);
+
+///@}
+
+/**
+ * @name Payload-shape accessors
+ *
+ * Generic helpers, each answering every command that shares one payload type,
+ * for code that dispatches on the shape of a reply rather than on the command --
+ * a logger, say. They apply the same checks as the per-command accessors, but a
+ * non-null result does not say which of those commands replied: read Event::id
+ * for that, or use the per-command accessor when the command is known.
+ */
+///@{
+
+/**
+ * @brief The TextPayload of a 0x55, 0x56, 0x57 or 0x6A reply.
+ * @param event The event to inspect.
+ * @return The payload, or @c nullptr unless @p event is a successful reply to one
+ *         of those four.
+ * @see as_manufacturer_name, as_battery_name, as_battery_serial_number,
+ *      as_sn_serial_number
+ */
+const TextPayload* as_text(const Event& event);
+
+/**
+ * @brief The VersionPayload of a 0x62 or 0x63 reply.
+ * @param event The event to inspect.
+ * @return The payload, or @c nullptr unless @p event is a successful reply to one
+ *         of those two.
+ * @see as_software_version, as_hardware_version
+ */
+const VersionPayload* as_version(const Event& event);
+
+/**
+ * @brief The AlarmThreshold of a 0x70..0x8A reply, for the classes that use it.
+ * @param event The event to inspect.
+ * @return The payload, or @c nullptr unless @p event is a successful
+ *         alarm-threshold reply of a class other than AlarmClass::CURRENT,
+ *         AlarmClass::HIGH_TEMPERATURE and AlarmClass::LOW_TEMPERATURE.
+ */
+const AlarmThreshold* as_alarm_threshold(const Event& event);
+
+/**
+ * @brief The CurrentAlarmThreshold of a 0x72, 0x7B or 0x84 reply.
+ * @param event The event to inspect.
+ * @return The payload, or @c nullptr unless @p event is a successful
+ *         AlarmClass::CURRENT threshold reply.
+ * @see as_overcurrent_threshold
+ */
+const CurrentAlarmThreshold* as_current_alarm_threshold(const Event& event);
+
+/**
+ * @brief The TempAlarmThreshold of a 0x73/0x74, 0x7C/0x7D or 0x85/0x86 reply.
+ * @param event The event to inspect.
+ * @return The payload, or @c nullptr unless @p event is a successful
+ *         AlarmClass::HIGH_TEMPERATURE or AlarmClass::LOW_TEMPERATURE threshold
+ *         reply.
+ * @see as_high_temperature_threshold, as_low_temperature_threshold
+ */
+const TempAlarmThreshold* as_temp_alarm_threshold(const Event& event);
+
+/**
  * @brief The MosControlAck of a 0xD9 or 0xDA MOSFET write.
  * @param event The event to inspect.
  * @return The payload, or @c nullptr unless @p event is a 0xD9 or 0xDA reply
  *         that either succeeded or failed with ErrorCode::WRITE_REJECTED.
+ * @see as_discharge_mos_control, as_charge_mos_control
  */
 const MosControlAck* as_mos_control_ack(const Event& event);
 

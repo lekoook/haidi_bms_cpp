@@ -67,7 +67,7 @@ TEST_F(MultiFrameTest, ManufacturerName_0x55_IsSixteenBytesOverThreeFrames) {
                              text_frames(DataId::MANUFACTURER_NAME, name, 1, 3));
 
     ASSERT_EQ(events.size(), 1U);
-    const TextPayload* payload = as_text(events[0]);
+    const TextPayload* payload = as_manufacturer_name(events[0]);
     ASSERT_NE(payload, nullptr);
     EXPECT_EQ(payload->len, 16) << "trimmed to the nominal length, not the 21 bytes carried";
     EXPECT_EQ(text_of(*payload), name);
@@ -81,9 +81,9 @@ TEST_F(MultiFrameTest, BatteryName_0x56_IsThirtyTwoBytesOverFiveFrames) {
         [&] { return bus.bms.poll_battery_name(); }, text_frames(DataId::BATTERY_NAME, name, 1, 5));
 
     ASSERT_EQ(events.size(), 1U);
-    ASSERT_NE(as_text(events[0]), nullptr);
-    EXPECT_EQ(as_text(events[0])->len, 32);
-    EXPECT_EQ(text_of(*as_text(events[0])), name);
+    ASSERT_NE(as_battery_name(events[0]), nullptr);
+    EXPECT_EQ(as_battery_name(events[0])->len, 32);
+    EXPECT_EQ(text_of(*as_battery_name(events[0])), name);
 }
 
 TEST_F(MultiFrameTest, BatterySerialNumber_0x57) {
@@ -93,8 +93,8 @@ TEST_F(MultiFrameTest, BatterySerialNumber_0x57) {
                              text_frames(DataId::BATTERY_SERIAL_NUMBER, serial, 1, 5));
 
     ASSERT_EQ(events.size(), 1U);
-    ASSERT_NE(as_text(events[0]), nullptr);
-    EXPECT_EQ(text_of(*as_text(events[0])).substr(0, serial.size()), serial);
+    ASSERT_NE(as_battery_serial_number(events[0]), nullptr);
+    EXPECT_EQ(text_of(*as_battery_serial_number(events[0])).substr(0, serial.size()), serial);
 }
 
 TEST_F(MultiFrameTest, SnSerialNumber_0x6A) {
@@ -104,8 +104,8 @@ TEST_F(MultiFrameTest, SnSerialNumber_0x6A) {
                              text_frames(DataId::SN_SERIAL_NUMBER, serial, 1, 5));
 
     ASSERT_EQ(events.size(), 1U);
-    ASSERT_NE(as_text(events[0]), nullptr);
-    EXPECT_EQ(text_of(*as_text(events[0])).substr(0, serial.size()), serial);
+    ASSERT_NE(as_sn_serial_number(events[0]), nullptr);
+    EXPECT_EQ(text_of(*as_sn_serial_number(events[0])).substr(0, serial.size()), serial);
 }
 
 TEST_F(MultiFrameTest, TextIsNotNullTerminated) {
@@ -135,7 +135,7 @@ TEST_F(MultiFrameTest, SoftwareVersion_0x62_IsFourteenBytesOverTwoFramesFromZero
                              text_frames(DataId::SOFTWARE_VERSION, version, 0, 2));
 
     ASSERT_EQ(events.size(), 1U);
-    const VersionPayload* payload = as_version(events[0]);
+    const VersionPayload* payload = as_software_version(events[0]);
     ASSERT_NE(payload, nullptr);
     EXPECT_EQ(payload->len, 14);
     EXPECT_EQ(text_of(*payload), version);
@@ -149,8 +149,8 @@ TEST_F(MultiFrameTest, HardwareVersion_0x63) {
                              text_frames(DataId::HARDWARE_VERSION, version, 0, 2));
 
     ASSERT_EQ(events.size(), 1U);
-    ASSERT_NE(as_version(events[0]), nullptr);
-    EXPECT_EQ(text_of(*as_version(events[0])), version);
+    ASSERT_NE(as_hardware_version(events[0]), nullptr);
+    EXPECT_EQ(text_of(*as_hardware_version(events[0])), version);
 }
 
 // -----------------------------------------------------------------------------

@@ -659,11 +659,10 @@ bool print_payload(const Event& event, unsigned ordinal) {
     } else if (const VersionPayload* p = as_version(event)) {
         print_ascii(p->text.data(), p->len);
         std::printf("  (%u bytes)\n", p->len);
-    } else if (const RawPayload* p = as_raw(event)) {
-        // 0x58's reply layout is undefined by the document, so the bytes are
-        // all there is to show.
-        print_hex(p->data);
-        std::printf("  (undecoded: the document defines no layout)\n");
+    } else if (const Rtc* p = as_battery_production_date(event)) {
+        // The document leaves 0x58's layout reserved; the library assumes 0x61's.
+        std::printf("%04u-%02u-%02u %02u:%02u:%02u  (layout assumed from 0x61)\n", p->year,
+                    p->month, p->day, p->hour, p->minute, p->second);
     } else if (const CellVoltageAlarm* p = as_cell_voltage_alarm(event)) {
         std::printf("over %u / %u mV, under %u / %u mV  (L1 / L2)\n", p->overvoltage_l1_mv,
                     p->overvoltage_l2_mv, p->undervoltage_l1_mv, p->undervoltage_l2_mv);
@@ -1130,7 +1129,7 @@ int main(int argc, char** argv) {
 
     // Leave the sweep to finish the probe it is on, then stop cleanly, so a
     // Ctrl-C still prints the summary.
-    struct sigaction sa{};
+    struct sigaction sa {};
     sa.sa_handler = &on_signal;
     ::sigaction(SIGINT, &sa, nullptr);
     ::sigaction(SIGTERM, &sa, nullptr);

@@ -139,10 +139,6 @@ bool decode_single(DataId id, const DataBytes& data, EventPayload& out) {
             }
             return true;
 
-        case DataId::BATTERY_PRODUCTION_DATE: // 0x58, layout undefined
-            out.raw = RawPayload{data};
-            return true;
-
         case DataId::CELL_VOLTAGE_ALARM: // 0x59
             out.cell_voltage_alarm =
                 CellVoltageAlarm{be16(data, 0), be16(data, 2), be16(data, 4), be16(data, 6)};
@@ -186,7 +182,10 @@ bool decode_single(DataId id, const DataBytes& data, EventPayload& out) {
                 CurrentParams{be16(data, 0), be16(data, 2), {data[4], data[5], data[6], data[7]}};
             return true;
 
-        case DataId::RTC: // 0x61
+        // The document marks every byte of the 0x58 reply reserved; its layout
+        // is assumed to be the same as 0x61.
+        case DataId::BATTERY_PRODUCTION_DATE: // 0x58
+        case DataId::RTC:                     // 0x61
             out.rtc = Rtc{to_year(data[0]), data[1], data[2],           data[3],
                           data[4],          data[5], {data[6], data[7]}};
             return true;

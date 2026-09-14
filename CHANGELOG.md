@@ -8,6 +8,35 @@ While the version is below `1.0.0`, a breaking change bumps the minor version.
 
 ## [Unreleased]
 
+### Added
+
+- **Per-command payload accessors**: every Data ID now has an `as_*()` accessor that answers only
+  that command, so reading code names the reply it expects. New are `as_manufacturer_name()`,
+  `as_battery_name()`, `as_battery_serial_number()`, `as_sn_serial_number()`,
+  `as_battery_production_date()`, `as_software_version()`, `as_hardware_version()`,
+  `as_discharge_mos_control()` and `as_charge_mos_control()`. The two MOSFET accessors still
+  answer `ErrorCode::WRITE_REJECTED` events.
+- **Per-class alarm-threshold accessors**: nine accessors, from `as_cell_overvoltage_threshold()`
+  to `as_temperature_difference_threshold()`, each taking an `AlarmLevel`, to match
+  `poll_alarm_threshold(AlarmClass, AlarmLevel)`. A class and a level together name one Data ID.
+  An out-of-range level returns `nullptr`, even where the computed ID would be another real
+  command.
+
+### Changed
+
+- **Production date (`0x58`) is now decoded.** The protocol document marks every byte of the reply
+  as reserved. The library now assumes it has the same layout as the RTC reply (`0x61`) and
+  decodes it as an `Rtc`.
+- The shared accessors `as_text()`, `as_version()`, `as_alarm_threshold()`,
+  `as_current_alarm_threshold()`, `as_temp_alarm_threshold()` and `as_mos_control_ack()` are
+  unchanged. They are now documented as payload-type accessors for code that doesn't know which
+  command replied.
+
+### Removed
+
+- **Breaking:** `RawPayload` and `as_raw()`. `0x58` is decoded now, so nothing else produced a raw
+  payload. Use `as_battery_production_date()` instead.
+
 ## [0.1.0] - 2026-09-14
 
 Initial release: a complete, tested driver for the HAIDI CAN/485/UART protocol V4.0.

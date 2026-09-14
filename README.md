@@ -174,8 +174,9 @@ Every result arrives as an `Event`:
 | `EventKind::TIMEOUT` | No reply arrived, even after retries. |
 | `EventKind::PROTOCOL_ERROR` | A frame was rejected or the exchange failed. See `event.error`. |
 
-Each `as_*()` accessor returns a pointer to the decoded payload, or `nullptr` if the event isn't
-a successful reply of that type, so you can safely try one after another:
+Every command has its own `as_*()` accessor, named after the command it reads. It returns a
+pointer to the decoded payload, or `nullptr` if the event isn't a successful reply to that
+command, so you can safely try one after another:
 
 ```cpp
 if (const CellVoltages* v = as_cell_voltages(event)) {
@@ -184,6 +185,11 @@ if (const CellVoltages* v = as_cell_voltages(event)) {
     }
 }
 ```
+
+Commands that share a payload type also have a generic accessor that accepts any of them:
+`as_text()`, `as_version()`, `as_alarm_threshold()`, `as_current_alarm_threshold()`,
+`as_temp_alarm_threshold()` and `as_mos_control_ack()`. These suit code that handles replies by
+payload type, such as a logger. When you know which command you sent, use its own accessor.
 
 Use `to_string()` on `EventKind`, `ErrorCode` or `DataId` to get a readable name for logging.
 
@@ -264,9 +270,25 @@ One call covers all 27 threshold commands:
 bms.poll_alarm_threshold(AlarmClass::CELL_OVERVOLTAGE, AlarmLevel::LEVEL_2);
 ```
 
-For `AlarmClass::CURRENT`, read the result with `as_current_alarm_threshold()`. For the two
-temperature classes, use `as_temp_alarm_threshold()`. For all other classes, use
-`as_alarm_threshold()`.
+Read the result with the accessor for that class, passing the same level:
+
+```cpp
+if (const AlarmThreshold* t = as_cell_overvoltage_threshold(event, AlarmLevel::LEVEL_2)) {
+    std::printf("trips at %u mV\n", t->value);
+}
+```
+
+| Class | Accessor | Payload |
+| --- | --- | --- |
+| `CELL_OVERVOLTAGE` | `as_cell_overvoltage_threshold()` | `AlarmThreshold` |
+| `CELL_UNDERVOLTAGE` | `as_cell_undervoltage_threshold()` | `AlarmThreshold` |
+| `CURRENT` | `as_overcurrent_threshold()` | `CurrentAlarmThreshold` |
+| `HIGH_TEMPERATURE` | `as_high_temperature_threshold()` | `TempAlarmThreshold` |
+| `LOW_TEMPERATURE` | `as_low_temperature_threshold()` | `TempAlarmThreshold` |
+| `TOTAL_OVERVOLTAGE` | `as_total_overvoltage_threshold()` | `AlarmThreshold` |
+| `TOTAL_UNDERVOLTAGE` | `as_total_undervoltage_threshold()` | `AlarmThreshold` |
+| `VOLTAGE_DIFFERENCE` | `as_voltage_difference_threshold()` | `AlarmThreshold` |
+| `TEMPERATURE_DIFFERENCE` | `as_temperature_difference_threshold()` | `AlarmThreshold` |
 
 ### MOSFET control
 
@@ -276,8 +298,14 @@ bms.set_charge_mos(true);
 ```
 
 The BMS replies with the state it applied. If that differs from what you requested, the event
-is a `PROTOCOL_ERROR` with `ErrorCode::WRITE_REJECTED`. `as_mos_control_ack()` still returns the
-payload, so you can compare `requested_on` with `reported_on`.
+is a `PROTOCOL_ERROR` with `ErrorCode::WRITE_REJECTED`. `as_discharge_mos_control()` and
+`as_charge_mos_control()` still return the payload in that case, so you can compare
+`requested_on` with `reported_on`.
+
+> [!NOTE]
+> The protocol document marks every byte of the production date reply (`0x58`) as reserved.
+> `as_battery_production_date()` assumes it has the same layout as the RTC reply (`0x61`) and
+> decodes it as an `Rtc`.
 
 ### Threading
 

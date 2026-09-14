@@ -13,10 +13,24 @@ bool is_response(const Event& event) { return event.kind == EventKind::RESPONSE;
 
 bool responds_to(const Event& event, DataId id) { return is_response(event) && event.id == id; }
 
+// The MOSFET writes are the one payload also valid on an error event: a
+// rejected write still reports the state that was asked for and the state the
+// device applied.
+bool carries_mos_ack(const Event& event, DataId id) {
+    return event.id == id && (is_response(event) || event.error == ErrorCode::WRITE_REJECTED);
+}
+
+// The level is range-checked first because an out-of-range one computes another
+// command's Data ID: TEMPERATURE_DIFFERENCE at level index 3 lands on 0x93.
+bool responds_to_threshold(const Event& event, AlarmClass cls, AlarmLevel level) {
+    return static_cast<uint8_t>(level) < ALARM_LEVEL_COUNT &&
+           responds_to(event, alarm_threshold_id(cls, level));
+}
+
 } // namespace
 
 // -----------------------------------------------------------------------------
-// Checked payload accessors
+// Per-command payload accessors
 // -----------------------------------------------------------------------------
 const CapacityVoltage* as_capacity_voltage(const Event& event) {
     return responds_to(event, DataId::CAPACITY_VOLTAGE) ? &event.payload.capacity_voltage : nullptr;
@@ -38,8 +52,17 @@ const BatteryOperationMode* as_battery_operation_mode(const Event& event) {
 const FirmwareIndex* as_firmware_index(const Event& event) {
     return responds_to(event, DataId::FIRMWARE_INDEX) ? &event.payload.firmware_index : nullptr;
 }
-const RawPayload* as_raw(const Event& event) {
-    return responds_to(event, DataId::BATTERY_PRODUCTION_DATE) ? &event.payload.raw : nullptr;
+const TextPayload* as_manufacturer_name(const Event& event) {
+    return responds_to(event, DataId::MANUFACTURER_NAME) ? &event.payload.text : nullptr;
+}
+const TextPayload* as_battery_name(const Event& event) {
+    return responds_to(event, DataId::BATTERY_NAME) ? &event.payload.text : nullptr;
+}
+const TextPayload* as_battery_serial_number(const Event& event) {
+    return responds_to(event, DataId::BATTERY_SERIAL_NUMBER) ? &event.payload.text : nullptr;
+}
+const Rtc* as_battery_production_date(const Event& event) {
+    return responds_to(event, DataId::BATTERY_PRODUCTION_DATE) ? &event.payload.rtc : nullptr;
 }
 const CellVoltageAlarm* as_cell_voltage_alarm(const Event& event) {
     return responds_to(event, DataId::CELL_VOLTAGE_ALARM) ? &event.payload.cell_voltage_alarm
@@ -71,6 +94,12 @@ const CurrentParams* as_current_params(const Event& event) {
 const Rtc* as_rtc(const Event& event) {
     return responds_to(event, DataId::RTC) ? &event.payload.rtc : nullptr;
 }
+const VersionPayload* as_software_version(const Event& event) {
+    return responds_to(event, DataId::SOFTWARE_VERSION) ? &event.payload.version : nullptr;
+}
+const VersionPayload* as_hardware_version(const Event& event) {
+    return responds_to(event, DataId::HARDWARE_VERSION) ? &event.payload.version : nullptr;
+}
 const FaultRecord* as_fault_record(const Event& event) {
     return responds_to(event, DataId::FAULT_RECORDS) ? &event.payload.fault_record : nullptr;
 }
@@ -93,6 +122,54 @@ const ActiveBalancingParams* as_active_balancing_params(const Event& event) {
 }
 const InverterParams* as_inverter_params(const Event& event) {
     return responds_to(event, DataId::INVERTER_PARAMS) ? &event.payload.inverter_params : nullptr;
+}
+const TextPayload* as_sn_serial_number(const Event& event) {
+    return responds_to(event, DataId::SN_SERIAL_NUMBER) ? &event.payload.text : nullptr;
+}
+const AlarmThreshold* as_cell_overvoltage_threshold(const Event& event, AlarmLevel level) {
+    return responds_to_threshold(event, AlarmClass::CELL_OVERVOLTAGE, level)
+               ? &event.payload.alarm_threshold
+               : nullptr;
+}
+const AlarmThreshold* as_cell_undervoltage_threshold(const Event& event, AlarmLevel level) {
+    return responds_to_threshold(event, AlarmClass::CELL_UNDERVOLTAGE, level)
+               ? &event.payload.alarm_threshold
+               : nullptr;
+}
+const CurrentAlarmThreshold* as_overcurrent_threshold(const Event& event, AlarmLevel level) {
+    return responds_to_threshold(event, AlarmClass::CURRENT, level)
+               ? &event.payload.current_alarm_threshold
+               : nullptr;
+}
+const TempAlarmThreshold* as_high_temperature_threshold(const Event& event, AlarmLevel level) {
+    return responds_to_threshold(event, AlarmClass::HIGH_TEMPERATURE, level)
+               ? &event.payload.temp_alarm_threshold
+               : nullptr;
+}
+const TempAlarmThreshold* as_low_temperature_threshold(const Event& event, AlarmLevel level) {
+    return responds_to_threshold(event, AlarmClass::LOW_TEMPERATURE, level)
+               ? &event.payload.temp_alarm_threshold
+               : nullptr;
+}
+const AlarmThreshold* as_total_overvoltage_threshold(const Event& event, AlarmLevel level) {
+    return responds_to_threshold(event, AlarmClass::TOTAL_OVERVOLTAGE, level)
+               ? &event.payload.alarm_threshold
+               : nullptr;
+}
+const AlarmThreshold* as_total_undervoltage_threshold(const Event& event, AlarmLevel level) {
+    return responds_to_threshold(event, AlarmClass::TOTAL_UNDERVOLTAGE, level)
+               ? &event.payload.alarm_threshold
+               : nullptr;
+}
+const AlarmThreshold* as_voltage_difference_threshold(const Event& event, AlarmLevel level) {
+    return responds_to_threshold(event, AlarmClass::VOLTAGE_DIFFERENCE, level)
+               ? &event.payload.alarm_threshold
+               : nullptr;
+}
+const AlarmThreshold* as_temperature_difference_threshold(const Event& event, AlarmLevel level) {
+    return responds_to_threshold(event, AlarmClass::TEMPERATURE_DIFFERENCE, level)
+               ? &event.payload.alarm_threshold
+               : nullptr;
 }
 const TotalVoltageCurrentSoc* as_total_voltage_current_soc(const Event& event) {
     return responds_to(event, DataId::TOTAL_VOLTAGE_CURRENT_SOC)
@@ -139,6 +216,19 @@ const BatteryStatus* as_battery_status(const Event& event) {
 const WakeupSource* as_wakeup_source(const Event& event) {
     return responds_to(event, DataId::WAKEUP_SOURCE) ? &event.payload.wakeup_source : nullptr;
 }
+const MosControlAck* as_discharge_mos_control(const Event& event) {
+    return carries_mos_ack(event, DataId::DISCHARGE_MOS_CONTROL) ? &event.payload.mos_control_ack
+                                                                 : nullptr;
+}
+const MosControlAck* as_charge_mos_control(const Event& event) {
+    return carries_mos_ack(event, DataId::CHARGE_MOS_CONTROL) ? &event.payload.mos_control_ack
+                                                              : nullptr;
+}
+
+// -----------------------------------------------------------------------------
+// Payload-shape accessors
+// -----------------------------------------------------------------------------
+
 // 0x55 Manufacturer Name, 0x56 Battery Name, 0x57 Battery Serial Number and
 // 0x6A SN Serial Number all decode to the same reassembled text payload.
 const TextPayload* as_text(const Event& event) {
@@ -205,20 +295,10 @@ const TempAlarmThreshold* as_temp_alarm_threshold(const Event& event) {
     }
 }
 
-// The one payload that is also valid on an error event: a rejected write still
-// reports the state that was asked for and the state the device applied.
 const MosControlAck* as_mos_control_ack(const Event& event) {
-    const bool carries_payload = is_response(event) || event.error == ErrorCode::WRITE_REJECTED;
-    if (!carries_payload) {
-        return nullptr;
-    }
-    switch (event.id) {
-        case DataId::DISCHARGE_MOS_CONTROL:
-        case DataId::CHARGE_MOS_CONTROL:
-            return &event.payload.mos_control_ack;
-        default:
-            return nullptr;
-    }
+    const bool carries_payload = carries_mos_ack(event, DataId::DISCHARGE_MOS_CONTROL) ||
+                                 carries_mos_ack(event, DataId::CHARGE_MOS_CONTROL);
+    return carries_payload ? &event.payload.mos_control_ack : nullptr;
 }
 
 // -----------------------------------------------------------------------------

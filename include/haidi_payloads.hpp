@@ -115,16 +115,6 @@ struct TextPayload {
     std::array<char, MAX_TEXT_LEN> text; ///< Content; **not** null-terminated.
 };
 
-/**
- * @brief An uninterpreted payload.
- *
- * Used for production date (0x58), whose reply layout the document never
- * specifies, so the bytes are handed back untouched.
- */
-struct RawPayload {
-    DataBytes data; ///< The eight payload bytes exactly as received.
-};
-
 /** @brief Cell over- and under-voltage alarm thresholds. Data ID 0x59. */
 struct CellVoltageAlarm {
     uint16_t overvoltage_l1_mv;  ///< Level 1 cell overvoltage, mV.
@@ -204,7 +194,12 @@ struct CurrentParams {
     std::array<uint8_t, 4> reserved; ///< Byte4-7, unspecified by the document.
 };
 
-/** @brief Real-time clock reading. Data ID 0x61. */
+/**
+ * @brief A date and time. Data ID 0x61 real-time clock, and 0x58 production date.
+ *
+ * @note The document marks every byte of the 0x58 reply reserved. It is decoded
+ * with this layout on the assumption that it matches 0x61.
+ */
 struct Rtc {
     uint16_t year;                   ///< Full year, already offset.
     uint8_t month;                   ///< Month, 1..12.
