@@ -654,11 +654,11 @@ bool print_payload(const Event& event, unsigned ordinal) {
         print_ascii(p->text.data(), p->text.size());
         std::printf("\n");
     } else if (const TextPayload* p = as_text(event)) {
-        print_ascii(p->text.data(), p->len);
-        std::printf("  (%u bytes)\n", p->len);
+        print_ascii(p->data(), p->size());
+        std::printf("  (%zu bytes)\n", p->size());
     } else if (const VersionPayload* p = as_version(event)) {
-        print_ascii(p->text.data(), p->len);
-        std::printf("  (%u bytes)\n", p->len);
+        print_ascii(p->data(), p->size());
+        std::printf("  (%zu bytes)\n", p->size());
     } else if (const Rtc* p = as_battery_production_date(event)) {
         // The document leaves 0x58's layout reserved; the library assumes 0x61's.
         std::printf("%04u-%02u-%02u %02u:%02u:%02u  (layout assumed from 0x61)\n", p->year,

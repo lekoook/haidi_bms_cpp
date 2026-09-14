@@ -16,6 +16,11 @@ While the version is below `1.0.0`, a breaking change bumps the minor version.
   `as_battery_production_date()`, `as_software_version()`, `as_hardware_version()`,
   `as_discharge_mos_control()` and `as_charge_mos_control()`. The two MOSFET accessors still
   answer `ErrorCode::WRITE_REJECTED` events.
+- **String-like `TextPayload` and `VersionPayload`**: both now have `data()`, `size()`, `empty()`,
+  `begin()`, `end()`, `view()` and an implicit `std::string_view` conversion. So
+  `std::string(payload)`, `s += payload`, range-for and iterator algorithms work directly.
+  `size()` is `len` clamped to the array, and bytes are exposed as decoded, untrimmed. The `len`
+  and `text` fields are unchanged.
 - **Per-class alarm-threshold accessors**: nine accessors, from `as_cell_overvoltage_threshold()`
   to `as_temperature_difference_threshold()`, each taking an `AlarmLevel`, to match
   `poll_alarm_threshold(AlarmClass, AlarmLevel)`. A class and a level together name one Data ID.

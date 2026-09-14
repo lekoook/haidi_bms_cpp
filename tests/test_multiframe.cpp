@@ -42,15 +42,6 @@ std::vector<MessageBytes> text_frames(DataId id, const std::string& text, uint8_
     return frames;
 }
 
-/// Reads a TextPayload back as a std::string; it is not null-terminated.
-std::string text_of(const TextPayload& payload) {
-    return std::string(payload.text.data(), payload.len);
-}
-
-std::string text_of(const VersionPayload& payload) {
-    return std::string(payload.text.data(), payload.len);
-}
-
 class MultiFrameTest : public ::testing::Test {
     protected:
     Loopback bus;
@@ -70,7 +61,7 @@ TEST_F(MultiFrameTest, ManufacturerName_0x55_IsSixteenBytesOverThreeFrames) {
     const TextPayload* payload = as_manufacturer_name(events[0]);
     ASSERT_NE(payload, nullptr);
     EXPECT_EQ(payload->len, 16) << "trimmed to the nominal length, not the 21 bytes carried";
-    EXPECT_EQ(text_of(*payload), name);
+    EXPECT_EQ(std::string(*payload), name);
     EXPECT_EQ(events[0].frames, 3);
     EXPECT_FALSE(bus.bms.busy());
 }
@@ -83,7 +74,7 @@ TEST_F(MultiFrameTest, BatteryName_0x56_IsThirtyTwoBytesOverFiveFrames) {
     ASSERT_EQ(events.size(), 1U);
     ASSERT_NE(as_battery_name(events[0]), nullptr);
     EXPECT_EQ(as_battery_name(events[0])->len, 32);
-    EXPECT_EQ(text_of(*as_battery_name(events[0])), name);
+    EXPECT_EQ(std::string(*as_battery_name(events[0])), name);
 }
 
 TEST_F(MultiFrameTest, BatterySerialNumber_0x57) {
@@ -94,7 +85,7 @@ TEST_F(MultiFrameTest, BatterySerialNumber_0x57) {
 
     ASSERT_EQ(events.size(), 1U);
     ASSERT_NE(as_battery_serial_number(events[0]), nullptr);
-    EXPECT_EQ(text_of(*as_battery_serial_number(events[0])).substr(0, serial.size()), serial);
+    EXPECT_EQ(as_battery_serial_number(events[0])->view().substr(0, serial.size()), serial);
 }
 
 TEST_F(MultiFrameTest, SnSerialNumber_0x6A) {
@@ -105,7 +96,7 @@ TEST_F(MultiFrameTest, SnSerialNumber_0x6A) {
 
     ASSERT_EQ(events.size(), 1U);
     ASSERT_NE(as_sn_serial_number(events[0]), nullptr);
-    EXPECT_EQ(text_of(*as_sn_serial_number(events[0])).substr(0, serial.size()), serial);
+    EXPECT_EQ(as_sn_serial_number(events[0])->view().substr(0, serial.size()), serial);
 }
 
 TEST_F(MultiFrameTest, TextIsNotNullTerminated) {
@@ -138,7 +129,7 @@ TEST_F(MultiFrameTest, SoftwareVersion_0x62_IsFourteenBytesOverTwoFramesFromZero
     const VersionPayload* payload = as_software_version(events[0]);
     ASSERT_NE(payload, nullptr);
     EXPECT_EQ(payload->len, 14);
-    EXPECT_EQ(text_of(*payload), version);
+    EXPECT_EQ(std::string(*payload), version);
     EXPECT_EQ(events[0].frames, 2);
 }
 
@@ -150,7 +141,7 @@ TEST_F(MultiFrameTest, HardwareVersion_0x63) {
 
     ASSERT_EQ(events.size(), 1U);
     ASSERT_NE(as_hardware_version(events[0]), nullptr);
-    EXPECT_EQ(text_of(*as_hardware_version(events[0])), version);
+    EXPECT_EQ(std::string(*as_hardware_version(events[0])), version);
 }
 
 // -----------------------------------------------------------------------------
@@ -167,7 +158,7 @@ TEST_F(MultiFrameTest, FramesArrivingOutOfOrderStillReassembleCorrectly) {
 
     ASSERT_EQ(events.size(), 1U);
     ASSERT_NE(as_text(events[0]), nullptr);
-    EXPECT_EQ(text_of(*as_text(events[0])), name) << "each frame is placed by its counter";
+    EXPECT_EQ(std::string(*as_text(events[0])), name) << "each frame is placed by its counter";
 }
 
 TEST_F(MultiFrameTest, ADuplicateFrameIsNotCountedTwice) {
@@ -185,7 +176,7 @@ TEST_F(MultiFrameTest, ADuplicateFrameIsNotCountedTwice) {
     bus.feed(frames[2]);
     ASSERT_EQ(bus.events.size(), 1U);
     ASSERT_NE(as_text(bus.events[0]), nullptr);
-    EXPECT_EQ(text_of(*as_text(bus.events[0])), name);
+    EXPECT_EQ(std::string(*as_text(bus.events[0])), name);
     EXPECT_EQ(bus.events[0].frames, 3) << "three distinct frames, not four";
 }
 
@@ -207,7 +198,8 @@ TEST_F(MultiFrameTest, ACounterBelowTheDocumentedBaseIsAccepted) {
     const TextPayload* payload = as_text(events[0]);
     ASSERT_NE(payload, nullptr);
     EXPECT_EQ(payload->len, 16);
-    EXPECT_EQ(text_of(*payload), name) << "decoded from frame 0, not shifted by the table's base";
+    EXPECT_EQ(std::string(*payload), name)
+        << "decoded from frame 0, not shifted by the table's base";
     EXPECT_FALSE(bus.bms.busy());
 }
 

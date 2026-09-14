@@ -29,6 +29,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string_view>
 
 namespace haidi
 {
@@ -109,10 +110,32 @@ struct FirmwareIndex {
  * number (0x57) and SN serial number (0x6A), each arriving across several
  * frames. The text is trimmed to the command's nominal length, 16 or 32 bytes.
  * A reply that lost a frame stops at the gap, leaving #len short.
+ *
+ * The struct reads like a string: `std::string name(*as_manufacturer_name(event));`
+ * works, as do `s += payload`, range-for and the iterator algorithms. Bytes are
+ * exposed exactly as decoded; nothing is trimmed.
+ *
+ * @note `std::string s = payload;`, `payload == "x"` and `os << payload` do not
+ * compile, because template deduction ignores the conversion. Use view().
  */
 struct TextPayload {
     uint8_t len;                         ///< Bytes of text, which may be short.
     std::array<char, MAX_TEXT_LEN> text; ///< Content; **not** null-terminated.
+
+    /** @brief First byte of the text. Not null-terminated; pair with size(). */
+    [[nodiscard]] const char* data() const { return text.data(); }
+    /** @brief Bytes of text: #len, clamped to the array so a bad #len never overruns. */
+    [[nodiscard]] size_t size() const { return len < text.size() ? len : text.size(); }
+    /** @brief True when no text arrived. */
+    [[nodiscard]] bool empty() const { return size() == 0; }
+    /** @brief Iterator to the first byte. */
+    [[nodiscard]] const char* begin() const { return data(); }
+    /** @brief Iterator one past the last valid byte. */
+    [[nodiscard]] const char* end() const { return data() + size(); }
+    /** @brief The valid bytes as a non-owning view. */
+    [[nodiscard]] std::string_view view() const { return {data(), size()}; }
+    /** @brief Implicit, so std::string's string_view overloads accept the payload. */
+    operator std::string_view() const { return view(); }
 };
 
 /** @brief Cell over- and under-voltage alarm thresholds. Data ID 0x59. */
@@ -213,11 +236,27 @@ struct Rtc {
 /**
  * @brief Software (0x62) or hardware (0x63) version, 14 bytes over two frames.
  *
- * Trimmed and truncated exactly like TextPayload.
+ * Trimmed and truncated exactly like TextPayload, and reads like a string the
+ * same way: `std::string version(*as_software_version(event));`.
  */
 struct VersionPayload {
     uint8_t len;                            ///< Bytes of text, which may be short.
     std::array<char, MAX_VERSION_LEN> text; ///< Content; **not** null-terminated.
+
+    /** @brief First byte of the text. Not null-terminated; pair with size(). */
+    [[nodiscard]] const char* data() const { return text.data(); }
+    /** @brief Bytes of text: #len, clamped to the array so a bad #len never overruns. */
+    [[nodiscard]] size_t size() const { return len < text.size() ? len : text.size(); }
+    /** @brief True when no text arrived. */
+    [[nodiscard]] bool empty() const { return size() == 0; }
+    /** @brief Iterator to the first byte. */
+    [[nodiscard]] const char* begin() const { return data(); }
+    /** @brief Iterator one past the last valid byte. */
+    [[nodiscard]] const char* end() const { return data() + size(); }
+    /** @brief The valid bytes as a non-owning view. */
+    [[nodiscard]] std::string_view view() const { return {data(), size()}; }
+    /** @brief Implicit, so std::string's string_view overloads accept the payload. */
+    operator std::string_view() const { return view(); }
 };
 
 /** @brief What a stored fault record describes. FaultRecord::record_id. */

@@ -12,6 +12,10 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <iterator>
+#include <string>
+#include <string_view>
 #include <type_traits>
 
 namespace haidi_test
@@ -58,12 +62,95 @@ TEST(PayloadTraits, EveryPayloadIsAPodSoItCanLiveInTheUnion) {
     static_assert(std::is_trivially_copyable<CellVoltages>::value, "");
     static_assert(std::is_trivially_copyable<CellTemperatures>::value, "");
     static_assert(std::is_trivially_copyable<TextPayload>::value, "");
+    static_assert(std::is_trivially_copyable<VersionPayload>::value, "");
     static_assert(std::is_trivially_copyable<CellBalancingBits>::value, "");
     static_assert(std::is_trivially_copyable<FaultStatus>::value, "");
     static_assert(std::is_trivially_copyable<MosControlAck>::value, "");
 
     // The union must be at least as large as its largest member.
     static_assert(sizeof(EventPayload) >= sizeof(CellVoltages), "");
+}
+
+// -----------------------------------------------------------------------------
+// TextPayload and VersionPayload string access
+// -----------------------------------------------------------------------------
+
+/// Builds a payload of type `T` holding `bytes`, with `len` set independently.
+template<typename T>
+T text_payload(std::string_view bytes, uint8_t len) {
+    T payload{};
+    payload.text.fill('#'); // garbage past #len, which no accessor may expose
+    std::copy(bytes.begin(), bytes.end(), payload.text.begin());
+    payload.len = len;
+    return payload;
+}
+
+TEST(TextPayloadTest, StaysAnAggregateSoTheDecoderCanFillItByField) {
+    static_assert(std::is_aggregate<TextPayload>::value, "");
+    static_assert(std::is_aggregate<VersionPayload>::value, "");
+}
+
+TEST(TextPayloadTest, ConvertsToStdStringThroughEveryCommonSpelling) {
+    const TextPayload payload = text_payload<TextPayload>("HELLO", 5);
+
+    EXPECT_EQ(std::string(payload), "HELLO");
+    EXPECT_EQ(std::string(payload.begin(), payload.end()), "HELLO");
+    EXPECT_EQ(std::string(payload.data(), payload.size()), "HELLO");
+    EXPECT_EQ(payload.view(), "HELLO");
+
+    const std::string_view view = payload;
+    EXPECT_EQ(view, "HELLO");
+
+    std::string appended = "name: ";
+    appended += payload;
+    EXPECT_EQ(appended, "name: HELLO");
+
+    std::string assigned;
+    assigned = payload;
+    EXPECT_EQ(assigned, "HELLO");
+}
+
+TEST(TextPayloadTest, IteratesOnlyTheValidBytes) {
+    const TextPayload payload = text_payload<TextPayload>("HELLO", 5);
+
+    EXPECT_EQ(std::distance(payload.begin(), payload.end()), 5);
+    EXPECT_TRUE(std::none_of(payload.begin(), payload.end(), [](char c) { return c == '#'; }));
+
+    std::string copied;
+    for (const char c : payload) {
+        copied.push_back(c);
+    }
+    EXPECT_EQ(copied, "HELLO");
+}
+
+TEST(TextPayloadTest, ZeroLengthIsEmpty) {
+    const TextPayload payload = text_payload<TextPayload>("", 0);
+
+    EXPECT_TRUE(payload.empty());
+    EXPECT_EQ(payload.size(), 0U);
+    EXPECT_EQ(std::string(payload), "");
+}
+
+TEST(TextPayloadTest, SizeClampsAnOutOfRangeLenToTheArray) {
+    EXPECT_EQ(text_payload<TextPayload>("", 200).size(), MAX_TEXT_LEN);
+    EXPECT_EQ(text_payload<VersionPayload>("", 200).size(), MAX_VERSION_LEN);
+    EXPECT_EQ(std::string(text_payload<VersionPayload>("", 200)).size(), MAX_VERSION_LEN);
+}
+
+TEST(TextPayloadTest, KeepsEmbeddedNulsBecauseNothingIsTrimmed) {
+    using namespace std::string_view_literals;
+    const TextPayload payload = text_payload<TextPayload>("A\0B\0"sv, 4);
+
+    EXPECT_EQ(payload.size(), 4U);
+    EXPECT_EQ(std::string(payload), std::string("A\0B\0", 4));
+}
+
+TEST(VersionPayloadTest, ConvertsToStdStringLikeTextPayload) {
+    const VersionPayload payload = text_payload<VersionPayload>("V1.2.3", 6);
+
+    EXPECT_EQ(std::string(payload), "V1.2.3");
+    EXPECT_EQ(std::string(payload.begin(), payload.end()), "V1.2.3");
+    EXPECT_FALSE(payload.empty());
 }
 
 // -----------------------------------------------------------------------------
