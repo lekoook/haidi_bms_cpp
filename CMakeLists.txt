@@ -5,7 +5,7 @@
 # (3.14) for the test suite's GoogleTest fallback, CONFIGURE_DEPENDS (3.12) in
 # ClangFormat.cmake, and googletest v1.17's own declared minimum (3.16).
 cmake_minimum_required(VERSION 3.16)
-project(haidi_bms_cpp VERSION 0.1.0 LANGUAGES C CXX)
+project(haidi_bms_cpp VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

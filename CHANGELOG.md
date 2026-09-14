@@ -8,6 +8,8 @@ While the version is below `1.0.0`, a breaking change bumps the minor version.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-14
+
 ### Added
 
 - **Per-command payload accessors**: every Data ID now has an `as_*()` accessor that answers only
@@ -116,5 +118,6 @@ Initial release: a complete, tested driver for the HAIDI CAN/485/UART protocol V
   `README.md` covers integration and usage.
 - **Licence** — MIT.
 
-[Unreleased]: https://github.com/lekoook/haidi_bms_cpp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/lekoook/haidi_bms_cpp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/lekoook/haidi_bms_cpp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/lekoook/haidi_bms_cpp/releases/tag/v0.1.0
